@@ -1,5 +1,10 @@
+import pytest
+
+from app.config import GROQ_API_KEY
 from app.agents.graph_flow import build_graph
 from app.agents.state import AgentState
+
+pytestmark = pytest.mark.skipif(not GROQ_API_KEY, reason="requires a real GROQ_API_KEY - diagnose/plan hit Groq")
 
 
 def test_runs_end_to_end_and_retries_until_pass():
