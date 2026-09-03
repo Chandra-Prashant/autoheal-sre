@@ -1,0 +1,5 @@
+[project]
+name = "autoheal-sre"
+version = "0.1.0"
+description = "Self-healing code repair agent"
+requires-python = ">=3.11"

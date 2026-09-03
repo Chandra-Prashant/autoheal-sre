@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+tree-sitter
+tree-sitter-python
+networkx
+chromadb
+langgraph
+langchain-core
+pydantic
+docker
+pygithub
+langfuse
+python-dotenv
+pytest
+langchain-groq
+groq
