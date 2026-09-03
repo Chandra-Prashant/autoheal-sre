@@ -46,6 +46,6 @@ def code(state: AgentState) -> dict:
         parts.append(f"That patch failed verification with this output:\n{state.test_output}\nFix it.")
     prompt = "\n\n".join(parts)
 
-    llm = get_llm()
+    llm = get_llm(model=state.model)
     resp = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)])
     return {"patch": _strip_fences(resp.content), "attempt": state.attempt + 1}

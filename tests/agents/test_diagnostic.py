@@ -13,7 +13,7 @@ class FakeLLM:
 
 def test_diagnose_calls_llm_with_trace_and_context(monkeypatch):
     fake = FakeLLM()
-    monkeypatch.setattr(diagnostic, "get_llm", lambda: fake)
+    monkeypatch.setattr(diagnostic, "get_llm", lambda **kw: fake)
 
     state = AgentState(trace="ZeroDivisionError: division by zero",
                         repo_path="/tmp/repo",
@@ -28,7 +28,7 @@ def test_diagnose_calls_llm_with_trace_and_context(monkeypatch):
 
 def test_diagnose_handles_missing_context(monkeypatch):
     fake = FakeLLM()
-    monkeypatch.setattr(diagnostic, "get_llm", lambda: fake)
+    monkeypatch.setattr(diagnostic, "get_llm", lambda **kw: fake)
 
     state = AgentState(trace="boom", repo_path="/tmp/repo")
     diagnostic.diagnose(state)

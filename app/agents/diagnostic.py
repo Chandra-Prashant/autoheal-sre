@@ -15,6 +15,6 @@ def diagnose(state: AgentState) -> dict:
     code_context = "\n\n".join(state.context) or "(no code context retrieved)"
     prompt = f"Stack trace:\n{state.trace}\n\nRelevant code:\n{code_context}"
 
-    llm = get_llm()
+    llm = get_llm(model=state.model)
     resp = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)])
     return {"diagnosis": resp.content}

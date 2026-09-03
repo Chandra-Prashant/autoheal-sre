@@ -5,6 +5,7 @@ class AgentState(BaseModel):
     trace: str
     repo_path: str
     context: list[str] = []
+    model: str | None = None  # override app.config.GROQ_MODEL for this run
 
     diagnosis: str | None = None
     plan: str | None = None

@@ -13,7 +13,7 @@ class FakeLLM:
 
 def test_plan_calls_llm_with_diagnosis_and_context(monkeypatch):
     fake = FakeLLM()
-    monkeypatch.setattr(planner, "get_llm", lambda: fake)
+    monkeypatch.setattr(planner, "get_llm", lambda **kw: fake)
 
     state = AgentState(trace="boom", repo_path="/tmp/repo",
                         diagnosis="off-by-one in the loop bound",
