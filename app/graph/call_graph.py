@@ -6,7 +6,7 @@ import networkx as nx
 from app.graph.ast_parser import Function, parse_file
 
 
-def _node_id(fn: Function) -> str:
+def node_id(fn: Function) -> str:
     return f"{fn.file}::{fn.qualname}"
 
 
@@ -27,13 +27,13 @@ class CallGraph:
             all_funcs.extend(parse_file(path))
 
         for fn in all_funcs:
-            node = _node_id(fn)
+            node = node_id(fn)
             self.g.add_node(node, file=fn.file, name=fn.name, qualname=fn.qualname,
                              start_line=fn.start_line, end_line=fn.end_line, source=fn.source)
             self._by_name.setdefault(fn.name, []).append(node)
 
         for fn in all_funcs:
-            caller = _node_id(fn)
+            caller = node_id(fn)
             for callee_name in fn.calls:
                 for callee in self._by_name.get(callee_name, []):
                     if callee != caller:
