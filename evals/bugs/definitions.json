@@ -1,0 +1,137 @@
+[
+  {
+    "id": "01-moving-average-off-by-one",
+    "category": "off-by-one",
+    "description": "moving_average's window range excludes the last valid window",
+    "file": "list_utils.py",
+    "find": "range(len(nums) - window + 1)",
+    "replace": "range(len(nums) - window)",
+    "test_target": "test_list_utils.py::test_moving_average_covers_every_window"
+  },
+  {
+    "id": "02-chunk-list-off-by-one",
+    "category": "off-by-one",
+    "description": "chunk_list slices size-1 elements per chunk instead of size",
+    "file": "list_utils.py",
+    "find": "lst[i:i + size]",
+    "replace": "lst[i:i + size - 1]",
+    "test_target": "test_list_utils.py::test_chunk_list_splits_evenly"
+  },
+  {
+    "id": "03-get-nth-from-end-off-by-one",
+    "category": "off-by-one",
+    "description": "get_nth_from_end returns the wrong element",
+    "file": "list_utils.py",
+    "find": "return lst[len(lst) - n]",
+    "replace": "return lst[len(lst) - n - 1]",
+    "test_target": "test_list_utils.py::test_get_nth_from_end_returns_correct_element"
+  },
+  {
+    "id": "04-paginate-cross-function-off-by-one",
+    "category": "off-by-one",
+    "description": "cross-function case: paginate itself is correct, but it consumes chunk_list's output and chunk_list has the same off-by-one as bug 02. The trace points at paginate; diagnosing it correctly requires pulling chunk_list's source in via the call graph, not just reading paginate in isolation.",
+    "file": "list_utils.py",
+    "find": "lst[i:i + size]",
+    "replace": "lst[i:i + size - 1]",
+    "test_target": "test_list_utils.py::test_paginate_returns_the_requested_page"
+  },
+  {
+    "id": "05-is-palindrome-off-by-one",
+    "category": "off-by-one",
+    "description": "is_palindrome's comparison loop skips the pair adjacent to the middle",
+    "file": "string_utils.py",
+    "find": "range(len(s) // 2)",
+    "replace": "range(len(s) // 2 - 1)",
+    "test_target": "test_string_utils.py::test_is_palindrome_detects_non_palindromes"
+  },
+  {
+    "id": "06-classify-unbound-variable",
+    "category": "unbound-variable",
+    "description": "classify has no else branch for n == 0, so label is referenced unbound",
+    "file": "flow_utils.py",
+    "find": "    elif n < 0:\n        label = \"negative\"\n    else:\n        label = \"zero\"\n    return label",
+    "replace": "    elif n < 0:\n        label = \"negative\"\n    return label",
+    "test_target": "test_flow_utils.py::test_classify_handles_zero"
+  },
+  {
+    "id": "07-sum-positive-unbound-variable",
+    "category": "unbound-variable",
+    "description": "sum_positive's total accumulator is never initialized before the loop",
+    "file": "flow_utils.py",
+    "find": "    total = 0\n    for n in nums:",
+    "replace": "    for n in nums:",
+    "test_target": "test_flow_utils.py::test_sum_positive_adds_positive_numbers"
+  },
+  {
+    "id": "08-first-match-unbound-variable",
+    "category": "unbound-variable",
+    "description": "first_match's result variable is never initialized before the search loop",
+    "file": "flow_utils.py",
+    "find": "    result = None\n    for item in items:",
+    "replace": "    for item in items:",
+    "test_target": "test_flow_utils.py::test_first_match_returns_none_when_nothing_matches"
+  },
+  {
+    "id": "09-divide-wrong-exception",
+    "category": "wrong-exception-type",
+    "description": "divide raises ValueError instead of ZeroDivisionError",
+    "file": "math_utils.py",
+    "find": "raise ZeroDivisionError(\"cannot divide by zero\")",
+    "replace": "raise ValueError(\"cannot divide by zero\")",
+    "test_target": "test_math_utils.py::test_divide_by_zero_raises_zero_division_error"
+  },
+  {
+    "id": "10-get-item-wrong-exception",
+    "category": "wrong-exception-type",
+    "description": "get_item catches KeyError and re-raises as ValueError",
+    "file": "dict_utils.py",
+    "find": "raise KeyError(f\"missing key: {key!r}\")",
+    "replace": "raise ValueError(f\"missing key: {key!r}\")",
+    "test_target": "test_dict_utils.py::test_get_item_raises_key_error_for_missing_key"
+  },
+  {
+    "id": "11-stack-pop-wrong-exception",
+    "category": "wrong-exception-type",
+    "description": "Stack.pop raises ValueError on empty instead of IndexError",
+    "file": "stack.py",
+    "find": "raise IndexError(\"pop from an empty stack\")",
+    "replace": "raise ValueError(\"pop from an empty stack\")",
+    "test_target": "test_stack.py::test_pop_from_empty_stack_raises_index_error"
+  },
+  {
+    "id": "12-parse-int-wrong-exception",
+    "category": "wrong-exception-type",
+    "description": "parse_int catches ValueError and re-raises as TypeError",
+    "file": "string_utils.py",
+    "find": "raise ValueError(f\"not a valid integer: {s!r}\")",
+    "replace": "raise TypeError(f\"not a valid integer: {s!r}\")",
+    "test_target": "test_string_utils.py::test_parse_int_raises_value_error_on_bad_input"
+  },
+  {
+    "id": "13-validate-email-missing-null-check",
+    "category": "missing-null-check",
+    "description": "validate_email crashes with AttributeError if email is None",
+    "file": "validators.py",
+    "find": "    if email is None:\n        return False\n    email = email.strip()",
+    "replace": "    email = email.strip()",
+    "test_target": "test_validators.py::test_validate_email_rejects_none"
+  },
+  {
+    "id": "14-merge-dicts-missing-null-check",
+    "category": "missing-null-check",
+    "description": "merge_dicts crashes if b is None instead of treating it as empty",
+    "file": "dict_utils.py",
+    "find": "    if b is None:\n        b = {}\n    merged = dict(a)",
+    "replace": "    merged = dict(a)",
+    "test_target": "test_dict_utils.py::test_merge_dicts_treats_none_as_empty"
+  },
+  {
+    "id": "15-get-config-value-missing-null-check",
+    "category": "missing-null-check",
+    "description": "get_config_value crashes if config is None instead of returning default",
+    "file": "dict_utils.py",
+    "find": "    if config is None:\n        return default\n    return config.get(key, default)",
+    "replace": "    return config.get(key, default)",
+    "test_target": "test_dict_utils.py::test_get_config_value_returns_default_when_config_is_none"
+  }
+]

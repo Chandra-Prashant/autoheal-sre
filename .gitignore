@@ -219,3 +219,6 @@ __marimo__/
 
 # Chroma local persistent store
 .chroma/
+
+# generated from evals/bugs/definitions.json by scripts/seed_bugs.py
+evals/bugs/seeded/

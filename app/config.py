@@ -19,4 +19,7 @@ CHROMA_DIR = os.getenv("CHROMA_DIR", ".chroma")
 
 
 def get_llm(temperature: float = 0.2):
-    return ChatGroq(model=GROQ_MODEL, groq_api_key=GROQ_API_KEY, temperature=temperature)
+    # the free Groq tier's TPM limit is easy to hit when the retry loop or
+    # an eval run fires several calls in quick succession - retry harder
+    # than the default (2) before giving up
+    return ChatGroq(model=GROQ_MODEL, groq_api_key=GROQ_API_KEY, temperature=temperature, max_retries=6)

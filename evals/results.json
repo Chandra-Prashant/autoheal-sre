@@ -1,0 +1,127 @@
+{
+  "note": "run before the run_evals.py context-path fix (build_context labeled files with a full local path instead of a basename, which the model echoed into diff headers and patch -p1 couldn't resolve). That fix was spot-verified on bugs 06/14/15 and flipped 15 from fail to pass; a full clean re-run to confirm the improvement across all 15 was blocked by hitting Groq's free-tier daily token quota. Re-run scripts/run_evals.py once quota resets to get an up-to-date pass@1/pass@3.",
+  "pass_at_1": 0.4,
+  "pass_at_3": 0.6666666666666666,
+  "results": [
+    {
+      "id": "01-moving-average-off-by-one",
+      "category": "off-by-one",
+      "passed": false,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": false
+    },
+    {
+      "id": "02-chunk-list-off-by-one",
+      "category": "off-by-one",
+      "passed": true,
+      "attempts": 1,
+      "pass_at_1": true,
+      "pass_at_3": true
+    },
+    {
+      "id": "03-get-nth-from-end-off-by-one",
+      "category": "off-by-one",
+      "passed": false,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": false
+    },
+    {
+      "id": "04-paginate-cross-function-off-by-one",
+      "category": "off-by-one",
+      "passed": true,
+      "attempts": 2,
+      "pass_at_1": false,
+      "pass_at_3": true
+    },
+    {
+      "id": "05-is-palindrome-off-by-one",
+      "category": "off-by-one",
+      "passed": true,
+      "attempts": 1,
+      "pass_at_1": true,
+      "pass_at_3": true
+    },
+    {
+      "id": "06-classify-unbound-variable",
+      "category": "unbound-variable",
+      "passed": false,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": false
+    },
+    {
+      "id": "07-sum-positive-unbound-variable",
+      "category": "unbound-variable",
+      "passed": true,
+      "attempts": 1,
+      "pass_at_1": true,
+      "pass_at_3": true
+    },
+    {
+      "id": "08-first-match-unbound-variable",
+      "category": "unbound-variable",
+      "passed": true,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": true
+    },
+    {
+      "id": "09-divide-wrong-exception",
+      "category": "wrong-exception-type",
+      "passed": true,
+      "attempts": 1,
+      "pass_at_1": true,
+      "pass_at_3": true
+    },
+    {
+      "id": "10-get-item-wrong-exception",
+      "category": "wrong-exception-type",
+      "passed": true,
+      "attempts": 1,
+      "pass_at_1": true,
+      "pass_at_3": true
+    },
+    {
+      "id": "11-stack-pop-wrong-exception",
+      "category": "wrong-exception-type",
+      "passed": true,
+      "attempts": 1,
+      "pass_at_1": true,
+      "pass_at_3": true
+    },
+    {
+      "id": "12-parse-int-wrong-exception",
+      "category": "wrong-exception-type",
+      "passed": true,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": true
+    },
+    {
+      "id": "13-validate-email-missing-null-check",
+      "category": "missing-null-check",
+      "passed": true,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": true
+    },
+    {
+      "id": "14-merge-dicts-missing-null-check",
+      "category": "missing-null-check",
+      "passed": false,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": false
+    },
+    {
+      "id": "15-get-config-value-missing-null-check",
+      "category": "missing-null-check",
+      "passed": false,
+      "attempts": 3,
+      "pass_at_1": false,
+      "pass_at_3": false
+    }
+  ]
+}
