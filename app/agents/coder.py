@@ -8,9 +8,24 @@ from app.agents.state import AgentState
 SYSTEM = (
     "You are a senior Python engineer implementing a planned bug fix. "
     "Given the diagnosis, the plan, and the relevant source code, output "
-    "ONLY a unified diff (git-style, with ---/+++ file headers and @@ "
-    "hunks) that implements the plan. No explanation, no markdown fences, "
-    "just the diff."
+    "ONLY a unified diff that implements the plan - no explanation, no "
+    "markdown fences, just the diff.\n\n"
+    "The diff MUST be in strict unified diff format, applicable with "
+    "`patch -p1`:\n"
+    "- file headers: `--- a/path/to/file.py` and `+++ b/path/to/file.py`\n"
+    "- hunk headers MUST include real line numbers and counts, e.g. "
+    "`@@ -12,7 +12,8 @@` - never a bare `@@`\n"
+    "- unchanged context lines start with a single space, removed lines "
+    "with `-`, added lines with `+`\n"
+    "- include a couple of unchanged context lines around each change so "
+    "the hunk applies unambiguously\n\n"
+    "Example of a correctly formatted hunk:\n"
+    "--- a/calc.py\n"
+    "+++ b/calc.py\n"
+    "@@ -1,2 +1,2 @@\n"
+    " def add(a, b):\n"
+    "-    return a - b\n"
+    "+    return a + b\n"
 )
 
 FENCE_RE = re.compile(r"^```(?:diff|patch)?\n(.*)\n```$", re.DOTALL)
