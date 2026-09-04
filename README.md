@@ -263,15 +263,14 @@ Last full run: **pass@1: 0.40, pass@3: 0.73** (6/15 and 11/15 respectively).
 
 | Category | Bugs | Pass@1 | Pass@3 |
 |---|---|---|---|
-| Off-by-one | 5 | see `evals/results.json` | see `evals/results.json` |
-| Unbound variable | 3 | see `evals/results.json` | see `evals/results.json` |
-| Wrong exception type | 4 | see `evals/results.json` | see `evals/results.json` |
-| Missing null check | 3 | see `evals/results.json` | see `evals/results.json` |
-| **Overall** | **15** | **0.40** | **0.73** |
+| Off-by-one | 5 | 3/5 (60%) | 4/5 (80%) |
+| Unbound variable | 3 | 1/3 (33%) | 2/3 (67%) |
+| Wrong exception type | 4 | 2/4 (50%) | 3/4 (75%) |
+| Missing null check | 3 | 0/3 (0%) | 2/3 (67%) |
+| **Overall** | **15** | **6/15 (40%)** | **11/15 (73%)** |
 
-(Per-category numbers deliberately point at the results file instead of
-being copied here - `evals/results.json` is the source of truth and I'd
-rather this table go stale-but-honest than get out of sync with a re-run.)
+Numbers are from the run recorded in `evals/results.json` - that file is
+the source of truth if this table ever goes stale after a re-run.
 
 ## Safeguards
 
