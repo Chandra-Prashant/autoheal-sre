@@ -98,8 +98,10 @@ cp .env.example .env   # fill in the keys below
   plan).
 - `GITHUB_TOKEN` - a **classic** PAT with the `repo` scope, for PR creation.
   See *Current state* for why it has to be classic, not fine-grained.
-- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` - not used yet, tracing is
-  still on the to-do list.
+- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` - optional. If set, every
+  graph run gets traced (node name, model, token usage, latency per node).
+  If unset, the Langfuse client just logs an auth warning and no-ops - the
+  agent loop still runs fine without them.
 
 You also need a running Docker daemon (Docker Desktop, or equivalent) -
 the sandbox and most of the eval tooling won't work without it. First run
@@ -168,10 +170,8 @@ seeded copy, retrieves context the same way the real pipeline would, and
 records whether the agent got it right on the first attempt (`pass@1`) or
 within the 3-attempt budget (`pass@3`).
 
-Last full run: **pass@1: 0.40, pass@3: 0.67** (6/15 and 10/15 respectively).
-See `evals/results.json` for the per-bug breakdown - it currently also
-carries a note about a fix (below) whose full-eval confirmation got blocked
-by hitting Groq's free-tier daily token limit mid-run.
+Last full run: **pass@1: 0.40, pass@3: 0.73** (6/15 and 11/15 respectively).
+See `evals/results.json` for the per-bug breakdown.
 
 ## Current state / known limitations
 
@@ -198,9 +198,12 @@ Being upfront about where the rough edges are:
   loop runs fine end-to-end, but only via the eval harness or by calling
   `graph_flow.build_graph()` directly - there's no webhook that takes a CI
   failure and runs the whole thing automatically.
-- **Langfuse tracing isn't wired in yet.** The keys are in `.env.example`
-  and the plan is still node name / tokens / latency per run, but no
-  tracing calls exist in the code yet.
+- **Langfuse tracing covers node name, model, tokens, and latency per
+  node**, grouped under one trace per graph run. The one wrinkle: LangGraph
+  runs nodes on a worker thread pool, which drops Langfuse's ambient
+  context, so each node attaches to its parent trace explicitly via ids
+  stashed on `AgentState` (see `app/tracing.py`) rather than relying on
+  `@observe`.
 - **PR generation isn't triggered automatically.** `open_pr()` works and is
   tested (including a real PR opened against a throwaway repo during
   development), but nothing in the loop calls it yet - right now you'd call

@@ -14,6 +14,8 @@ from app.agents.state import AgentState
 from app.config import GROQ_MODEL
 from app.graph.call_graph import CallGraph
 from app.graph.embeddings import FunctionIndex, retrieve_context
+from app.tracing import traced_run
+from langfuse import get_client
 from scripts.seed_bugs import load_definitions, seed
 
 RESULTS_PATH = os.path.join(os.path.dirname(__file__), "..", "evals", "results.json")
@@ -56,7 +58,7 @@ def run_bug(bug: dict, model: str) -> dict:
     context = build_context(repo_path, trace)
 
     state = AgentState(trace=trace, repo_path=repo_path, context=context, model=model)
-    result = build_graph().invoke(state)
+    result = traced_run(build_graph(), state)
 
     return {
         "id": bug["id"],
@@ -111,6 +113,10 @@ def main():
     pass_at_1, pass_at_3 = _write_results(results, args.model)
     print(f"\nmodel: {args.model}")
     print(f"pass@1: {pass_at_1:.2f}  pass@3: {pass_at_3:.2f}")
+
+    # the langfuse client batches spans in the background - flush before the
+    # short-lived script process exits or the last run's traces get dropped
+    get_client().flush()
 
 
 if __name__ == "__main__":

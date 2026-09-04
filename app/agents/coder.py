@@ -2,8 +2,9 @@ import re
 
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.config import get_llm
+from app.config import GROQ_MODEL, get_llm
 from app.agents.state import AgentState
+from app.tracing import log_usage, node_span
 
 SYSTEM = (
     "You are a senior Python engineer implementing a planned bug fix. "
@@ -46,6 +47,9 @@ def code(state: AgentState) -> dict:
         parts.append(f"That patch failed verification with this output:\n{state.test_output}\nFix it.")
     prompt = "\n\n".join(parts)
 
-    llm = get_llm(model=state.model)
-    resp = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)])
+    model = state.model or GROQ_MODEL
+    llm = get_llm(model=model)
+    with node_span(state, "code", as_type="generation") as gen:
+        resp = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)])
+        log_usage(gen, resp, model)
     return {"patch": _strip_fences(resp.content), "attempt": state.attempt + 1}

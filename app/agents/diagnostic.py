@@ -1,7 +1,8 @@
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from app.config import get_llm
+from app.config import GROQ_MODEL, get_llm
 from app.agents.state import AgentState
+from app.tracing import log_usage, node_span
 
 SYSTEM = (
     "You are a senior Python engineer diagnosing a test failure. "
@@ -15,6 +16,9 @@ def diagnose(state: AgentState) -> dict:
     code_context = "\n\n".join(state.context) or "(no code context retrieved)"
     prompt = f"Stack trace:\n{state.trace}\n\nRelevant code:\n{code_context}"
 
-    llm = get_llm(model=state.model)
-    resp = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)])
+    model = state.model or GROQ_MODEL
+    llm = get_llm(model=model)
+    with node_span(state, "diagnose", as_type="generation") as gen:
+        resp = llm.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=prompt)])
+        log_usage(gen, resp, model)
     return {"diagnosis": resp.content}
