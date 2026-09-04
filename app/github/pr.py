@@ -6,7 +6,7 @@ from github import Auth, Github
 from app.config import GITHUB_TOKEN
 
 
-def open_pr(repo_path: str, repo_full_name: str, title: str, body: str, base: str = "main") -> str:
+def open_pr(repo_path: str, repo_full_name: str, title: str, body: str, base: str | None = None) -> str:
     if not GITHUB_TOKEN:
         raise RuntimeError("GITHUB_TOKEN not set")
 
@@ -18,5 +18,5 @@ def open_pr(repo_path: str, repo_full_name: str, title: str, body: str, base: st
 
     gh = Github(auth=Auth.Token(GITHUB_TOKEN))
     repo = gh.get_repo(repo_full_name)
-    pr = repo.create_pull(title=title, body=body, head=branch, base=base)
+    pr = repo.create_pull(title=title, body=body, head=branch, base=base or repo.default_branch)
     return pr.html_url

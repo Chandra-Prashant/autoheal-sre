@@ -89,31 +89,31 @@ def _run_fix(bug_id: str, model: str | None):
     yield _sse("stage", {"message": f"seeding bug {bug_id}..."})
     try:
         apply_bug(repo_path, bug)
-    except ValueError as e:
+
+        yield _sse("stage", {"message": "capturing the real test failure..."})
+        trace = capture_trace(repo_path, bug["test_target"])
+
+        yield _sse("stage", {"message": "building call graph and retrieving context..."})
+        context = build_context(repo_path, trace)
+
+        state = AgentState(trace=trace, repo_path=repo_path, context=context, model=model)
+        merged = state.model_dump()
+
+        for update in traced_stream(build_graph(), state):
+            for node, data in update.items():
+                merged.update(data)
+                yield _sse("node", {
+                    "node": node,
+                    "attempt": merged.get("attempt"),
+                    "passed": merged.get("passed"),
+                    "diagnosis": merged.get("diagnosis"),
+                    "plan": merged.get("plan"),
+                    "test_output": merged.get("test_output"),
+                })
+    except Exception as e:
         shutil.rmtree(repo_path, ignore_errors=True)
-        yield _sse("error", {"message": str(e)})
+        yield _sse("error", {"message": _scrub(str(e))})
         return
-
-    yield _sse("stage", {"message": "capturing the real test failure..."})
-    trace = capture_trace(repo_path, bug["test_target"])
-
-    yield _sse("stage", {"message": "building call graph and retrieving context..."})
-    context = build_context(repo_path, trace)
-
-    state = AgentState(trace=trace, repo_path=repo_path, context=context, model=model)
-    merged = state.model_dump()
-
-    for update in traced_stream(build_graph(), state):
-        for node, data in update.items():
-            merged.update(data)
-            yield _sse("node", {
-                "node": node,
-                "attempt": merged.get("attempt"),
-                "passed": merged.get("passed"),
-                "diagnosis": merged.get("diagnosis"),
-                "plan": merged.get("plan"),
-                "test_output": merged.get("test_output"),
-            })
 
     if merged.get("passed"):
         run_id = uuid.uuid4().hex

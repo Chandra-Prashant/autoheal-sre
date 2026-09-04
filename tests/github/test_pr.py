@@ -6,6 +6,7 @@ from app.github import pr
 class FakeRepo:
     def __init__(self):
         self.calls = []
+        self.default_branch = "main"
 
     def create_pull(self, **kwargs):
         self.calls.append(kwargs)
@@ -40,6 +41,18 @@ def test_open_pr_runs_git_and_creates_pull(monkeypatch, tmp_path):
     assert create["body"] == "diagnosis + plan here"
     assert create["base"] == "main"
     assert create["head"].startswith("autoheal/fix-")
+
+
+def test_open_pr_uses_the_repos_actual_default_branch(monkeypatch, tmp_path):
+    monkeypatch.setattr(pr.subprocess, "run", lambda cmd, cwd, check: None)
+    monkeypatch.setattr(pr, "GITHUB_TOKEN", "fake-token")
+    fake_gh = FakeGithub()
+    fake_gh.repo.default_branch = "master"
+    monkeypatch.setattr(pr, "Github", lambda auth=None: fake_gh)
+
+    pr.open_pr(str(tmp_path), "me/repo", "fix the bug", "body")
+
+    assert fake_gh.repo.calls[0]["base"] == "master"
 
 
 def test_open_pr_raises_without_a_token(monkeypatch, tmp_path):
