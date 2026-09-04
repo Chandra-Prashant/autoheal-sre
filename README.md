@@ -51,6 +51,46 @@ points at function A, and A's actual bug lives in a function B that A
 calls, the agent gets B's source too - not just A in isolation. This is
 tested directly (see the eval bugs below, bug 04 in particular).
 
+## Architecture
+
+```
+                     stack trace / failing pytest node
+                                    |
+                                    v
+                      ┌─────────────────────────┐
+                      │  app/graph/ast_parser.py │   tree-sitter walks the repo,
+                      │  + call_graph.py          │   extracts function/class
+                      └────────────┬──────────────┘   boundaries + who-calls-whom
+                                    |
+                                    v
+                      ┌─────────────────────────┐
+                      │  app/graph/embeddings.py │   Chroma semantic search over
+                      │                            │   the failing function, then
+                      └────────────┬──────────────┘   graph-expanded to callers/callees
+                                    |
+                                    v
+                      ┌─────────────────────────────────────┐
+                      │   app/agents/graph_flow.py (LangGraph)│
+                      │                                        │
+                      │   diagnose -> plan -> code -> verify   │
+                      │       ^                        |       │
+                      │       └──── retry (max 3x) ─────┘       │
+                      └────────────────────┬───────────────────┘
+                                            |
+                              pass? ────────┴──────── fail after 3x?
+                                |                            |
+                                v                            v
+                  app/github/pr.py (on approval)     last test_output returned,
+                  push branch + open real PR           loop just stops, no PR
+```
+
+Every node writes to `AgentState` (`app/agents/state.py`) and reads what it
+needs from there - it's the one pydantic object threaded through the whole
+graph, including the Langfuse trace/span ids once tracing is on. Nothing is
+kept in global state between runs; a fresh `AgentState` gets built per
+invocation, which is also why concurrent runs don't step on each other (see
+*What happens if two fixes run at once* below).
+
 ## Project structure
 
 ```
@@ -220,7 +260,37 @@ records whether the agent got it right on the first attempt (`pass@1`) or
 within the 3-attempt budget (`pass@3`).
 
 Last full run: **pass@1: 0.40, pass@3: 0.73** (6/15 and 11/15 respectively).
-See `evals/results.json` for the per-bug breakdown.
+
+| Category | Bugs | Pass@1 | Pass@3 |
+|---|---|---|---|
+| Off-by-one | 5 | see `evals/results.json` | see `evals/results.json` |
+| Unbound variable | 3 | see `evals/results.json` | see `evals/results.json` |
+| Wrong exception type | 4 | see `evals/results.json` | see `evals/results.json` |
+| Missing null check | 3 | see `evals/results.json` | see `evals/results.json` |
+| **Overall** | **15** | **0.40** | **0.73** |
+
+(Per-category numbers deliberately point at the results file instead of
+being copied here - `evals/results.json` is the source of truth and I'd
+rather this table go stale-but-honest than get out of sync with a re-run.)
+
+## Safeguards
+
+Two checks exist specifically so a "passing" patch can't quietly do the
+wrong thing:
+
+- **Full suite, not just the failing test.** `run_tests()` in
+  `app/sandbox/runner.py` runs plain `pytest -q` with no path filter, so a
+  patch that fixes the named failure but breaks something else gets caught
+  as a failed attempt, not a false success.
+- **Patches can't touch test files.** `verify()` in
+  `app/agents/verifier.py` parses the diff's `--- a/... +++ b/...` headers
+  before applying anything. If any touched file matches `test_*.py`,
+  `*_test.py`, or lives under a `tests/` directory, the attempt is rejected
+  with a message telling the coder tests can't be modified, and that
+  feedback flows back into the retry loop the same way a real test failure
+  would. This exists because an unconstrained model asked to "make the
+  test pass" will sometimes take the easy way out and edit the test
+  instead of the code.
 
 ## Current state / known limitations
 
@@ -265,10 +335,87 @@ Being upfront about where the rough edges are:
   context, so each node attaches to its parent trace explicitly via ids
   stashed on `AgentState` (see `app/tracing.py`) rather than relying on
   `@observe`.
-- **PR generation isn't triggered automatically.** `open_pr()` works and is
-  tested (including a real PR opened against a throwaway repo during
-  development), but nothing in the loop calls it yet - right now you'd call
-  it yourself after a `verify` success.
+- **PR generation is gated behind manual approval**, not automatic. A
+  passing `verify` doesn't push anything by itself - the CLI just prints
+  the diff, and the frontend requires the explicit "Approve & push" click.
+  This was a deliberate choice, not a missing feature (see below).
+
+## Questions I'd expect about this
+
+**Why tree-sitter and a call graph instead of just chunking the repo for
+RAG?** Fixed-size text chunking cuts functions in half and has no idea
+that function A calls function B - it can only find what's textually
+similar to the failing code, not what's structurally relevant. Bug 04 in
+the eval set is a direct test of this: the bug is in `chunk_list`, but the
+trace only names `paginate`. Pure text similarity between the trace and
+the codebase wouldn't reliably surface `chunk_list` at all, since nothing
+in the error text mentions it by name. The call graph does, because it
+knows `paginate` calls `chunk_list`.
+
+**Why LangGraph instead of just calling the LLM in a loop yourself?**
+Honestly, a hand-rolled loop with a counter could do most of the same job.
+What LangGraph actually buys here is the conditional-edge routing (pass vs
+retry vs give-up-after-3 as explicit graph edges, not nested if/else) and
+a state object that's easy to trace end to end - each node reads/writes
+one `AgentState`, which made wiring Langfuse tracing across nodes running
+on a thread pool a lot more tractable than it would've been with ad hoc
+function calls.
+
+**Why cap retries at 3?** Cost and time, mostly - each attempt is a real
+LLM call plus a real Docker run, and Groq's daily token cap makes
+unlimited retries a genuinely bad idea, not just a theoretical one (see
+*Current state*). 3 was picked because it's usually enough for the model
+to correct a small misunderstanding using the real stderr from the
+previous attempt, without either looping forever on a bug it fundamentally
+can't reason its way to, or burning a disproportionate amount of quota on
+one hard case.
+
+**Why does 3 attempts only get to 73%, not higher?** Two separate reasons.
+Some bugs are probably just hard for a 120B open model to reason about
+correctly even with the right context - more attempts wouldn't help if the
+model keeps making the same category of mistake. The other reason is
+mechanical: the diff-format issue mentioned above, where a malformed hunk
+header gets a syntactically fine-looking patch rejected before it's even
+tested. That second one is a real, fixable weakness in the coder's output
+format, not a reasoning failure - worth calling out as the more actionable
+of the two if asked what I'd improve first.
+
+**Is this safe to point at a real production repo?** The execution side,
+yes - nothing runs outside the sandbox, which has no network access, capped
+memory/CPU, a short timeout, and a read-only filesystem outside the
+working directory. The write side is intentionally conservative: PR
+creation requires a human clicking "Approve & push" after seeing the diff,
+never happens automatically on a passing verify, and the verifier
+separately rejects any patch that touches a test file so a fix can't just
+delete or rewrite the test it's supposed to satisfy.
+
+**What happens if two fixes run at once?** Each request builds its own
+fresh `AgentState` and clones the target repo into its own temp directory
+(`app/sandbox/runner.py`), so two concurrent runs don't share mutable
+state or write into the same working directory. What isn't handled is load
+- there's no queue, so enough concurrent requests would just compete for
+the same Docker daemon and the same Groq rate limit. Fine for a demo,
+not something this has been built or tested for.
+
+**Does this only work on the 15 seeded bugs?** No - the seeded bugs exist
+so there's a known-answer set to measure pass@1/pass@3 against, not because
+the pipeline is hardcoded to them. The CLI (`autoheal fix <trace-file>
+--repo <path>`) runs the same call-graph retrieval and agent loop against
+any Python repo and any trace you give it. The demo frontend specifically
+is scoped to the seeded bugs (see *Non-goals* - it's built to reliably
+demo the loop, not to be a general-purpose intake form), but that's a
+frontend scoping choice, not a backend limitation.
+
+**Why not deploy this / ship it as an installer?** Two practical reasons.
+The sandbox step needs a real Docker daemon, which most simple free
+hosting doesn't support without extra setup (Docker-in-Docker or a VM-based
+host), and a public endpoint would mean anyone hitting it burns the same
+shared Groq quota this project already runs into solo. Packaging it as a
+standalone installer has a similar problem - Docker can't be bundled into
+an installer, so a user would still need Docker Desktop installed
+separately, and the tool needs its own Groq/GitHub keys to function, which
+can't be baked into something handed out generically. Running it locally
+from source with your own keys is the realistic way to use this right now.
 
 ## Non-goals
 
@@ -285,3 +432,12 @@ useful context for anyone reading the code and wondering why something
   UI. `app/static/index.html` is a single plain HTML/JS page with no build
   step, built specifically to demo the loop against the seeded eval bugs -
   it's not a general dashboard and wasn't meant to become one.
+- Automatic PR pushing on a passing verify. This isn't a gap to close
+  later - a human approving the diff before anything reaches GitHub is a
+  deliberate part of the design, not a step that got skipped.
+- A general-purpose webhook trigger (e.g. a Sentry integration that
+  auto-detects a live crash and kicks off a fix with no human in the loop).
+  The architecture doesn't preclude adding one - `GET /fix` already shows
+  the shape of an HTTP entry point - but building and trusting an
+  always-on production trigger is a different, bigger project than this
+  one.
