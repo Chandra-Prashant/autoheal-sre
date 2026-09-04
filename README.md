@@ -55,7 +55,9 @@ tested directly (see the eval bugs below, bug 04 in particular).
 ```
 app/
   main.py            FastAPI app, currently just a /health endpoint
+  cli.py               autoheal fix CLI entry point (see pyproject.toml)
   config.py           env var loading, the Groq client factory
+  tracing.py            Langfuse spans, threaded through AgentState
   graph/
     ast_parser.py      tree-sitter function/class extraction
     call_graph.py       NetworkX call graph build + query
@@ -78,6 +80,7 @@ evals/
 scripts/
   seed_bugs.py           seeds bugs from definitions.json into evals/bugs/seeded/
   run_evals.py            runs the full loop against every seeded bug, writes results.json
+  demo.py                 seeds one bug and runs the autoheal CLI against it, for recording
 tests/
   mirrors app/, plus tests/fixtures and tests/scripts for the eval tooling
 ```
@@ -113,13 +116,31 @@ builds a small `autoheal-sandbox:latest` image (python:3.11-slim + pytest).
 uvicorn app.main:app --reload
 ```
 
-gets you `GET /health` -> `{"status": "ok"}`. That's the only endpoint so
-far - there's no webhook or trigger route wired up yet that runs the full
-diagnose-plan-code-verify loop over HTTP. Right now the loop is driven
-directly in Python, either through the eval harness (`scripts/run_evals.py`)
-or by building an `AgentState` and calling `app.agents.graph_flow.build_graph()
-.invoke(...)` yourself. Wiring a real trigger endpoint is the obvious next
-step but wasn't part of this pass.
+gets you `GET /health` -> `{"status": "ok"}`. That's the only HTTP endpoint
+so far - there's no webhook or trigger route wired up yet that runs the
+full diagnose-plan-code-verify loop over HTTP (see *Current state*).
+
+The actual way to run the loop is the CLI:
+
+```
+pip install -e .
+autoheal fix <trace-file> --repo <path-to-the-repo-the-trace-came-from>
+```
+
+`<trace-file>` is just a text file with a pytest failure / traceback in it
+- copy-paste real pytest output, there's nothing special about the format.
+The CLI builds the call graph + Chroma index over `--repo` itself, retrieves
+context the same way the eval harness does, then runs the full retry loop
+and prints the final diff (or the last failure output, if it gave up).
+`--model` optionally overrides the default Groq model for that one run.
+
+For a quick end-to-end demo without hand-picking a bug or a trace file:
+
+```
+python scripts/demo.py            # seeds bug 01 (moving-average off-by-one),
+                                   # captures the real failure, runs autoheal fix
+python scripts/demo.py --bug 09   # or any other id from evals/bugs/definitions.json
+```
 
 ## Tests
 
@@ -194,10 +215,10 @@ Being upfront about where the rough edges are:
   and running the full 15-bug eval a few times in one day is enough to hit
   it. There's no queuing or backoff-across-days here, it just fails loudly
   when the budget's gone.
-- **No trigger endpoint yet.** `app/main.py` only exposes `/health`. The
-  loop runs fine end-to-end, but only via the eval harness or by calling
-  `graph_flow.build_graph()` directly - there's no webhook that takes a CI
-  failure and runs the whole thing automatically.
+- **No HTTP trigger endpoint yet.** `app/main.py` only exposes `/health`.
+  The loop runs fine end-to-end via the `autoheal fix` CLI (`app/cli.py`)
+  or the eval harness, but there's no webhook that takes a CI failure and
+  runs the whole thing automatically over HTTP.
 - **Langfuse tracing covers node name, model, tokens, and latency per
   node**, grouped under one trace per graph run. The one wrinkle: LangGraph
   runs nodes on a worker thread pool, which drops Langfuse's ambient

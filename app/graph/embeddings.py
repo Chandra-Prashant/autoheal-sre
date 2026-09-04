@@ -1,3 +1,7 @@
+import os
+import shutil
+import tempfile
+
 import chromadb
 
 from app.config import CHROMA_DIR
@@ -40,3 +44,26 @@ def retrieve_context(index: FunctionIndex, graph: CallGraph, text: str, k: int =
         if seed in graph.g:
             nodes |= set(graph.context(seed, depth=depth).nodes)
     return nodes
+
+
+def build_context(repo_path: str, trace: str, k: int = 3, depth: int = 1) -> list[str]:
+    # exclude test files - we want the call graph over the application code
+    # the bug lives in, not the test suite
+    paths = [os.path.join(repo_path, f) for f in os.listdir(repo_path)
+             if f.endswith(".py") and not f.startswith("test_")]
+
+    graph = CallGraph()
+    graph.build_from_files(paths)
+
+    chroma_dir = tempfile.mkdtemp(prefix="autoheal-context-chroma-")
+    try:
+        index = FunctionIndex(path=chroma_dir)
+        index.index_graph(graph)
+        nodes = retrieve_context(index, graph, trace, k=k, depth=depth)
+    finally:
+        shutil.rmtree(chroma_dir, ignore_errors=True)
+
+    # basename only - the sandbox applies the patch with the flat repo dir
+    # as cwd, so a diff header with the full local path won't resolve
+    return [f"{graph.g.nodes[n]['qualname']} ({os.path.basename(graph.g.nodes[n]['file'])}):\n{graph.g.nodes[n]['source']}"
+            for n in nodes]
