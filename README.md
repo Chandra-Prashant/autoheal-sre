@@ -401,10 +401,12 @@ not something this has been built or tested for.
 so there's a known-answer set to measure pass@1/pass@3 against, not because
 the pipeline is hardcoded to them. The CLI (`autoheal fix <trace-file>
 --repo <path>`) runs the same call-graph retrieval and agent loop against
-any Python repo and any trace you give it. The demo frontend specifically
-is scoped to the seeded bugs (see *Non-goals* - it's built to reliably
-demo the loop, not to be a general-purpose intake form), but that's a
-frontend scoping choice, not a backend limitation.
+any Python repo and any trace you give it, and the demo frontend's Custom
+tab (see *Running it*) exposes the same thing over HTTP - any `owner/name`
+repo and any pasted trace, no seeding involved. The seeded-bug dropdown is
+still there because it's the fastest way to get a reliable demo without
+hunting for a real failure first, not because it's the only path through
+the pipeline.
 
 **Why not deploy this / ship it as an installer?** Two practical reasons.
 The sandbox step needs a real Docker daemon, which most simple free
