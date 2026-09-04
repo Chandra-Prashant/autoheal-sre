@@ -11,6 +11,16 @@ DOCKERFILE_DIR = os.path.dirname(__file__)
 TIMEOUT = 30
 
 
+def capture_trace(repo_path: str, test_target: str) -> str:
+    # runs directly on the host, not sandboxed - this is just to capture
+    # what the failure looks like before the fix loop starts
+    result = subprocess.run(
+        ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", test_target],
+        cwd=repo_path, capture_output=True, text=True,
+    )
+    return result.stdout + result.stderr
+
+
 def apply_patch(repo_path: str, patch: str) -> str:
     workdir = tempfile.mkdtemp(prefix="autoheal-")
     shutil.copytree(repo_path, workdir, dirs_exist_ok=True)

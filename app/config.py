@@ -11,6 +11,10 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = "openai/gpt-oss-120b"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+# repo the demo frontend clones and opens PRs against - its default branch
+# content needs to match evals/bugs/sample_repo for a seeded bug's find/
+# replace transform (and the resulting patch) to apply cleanly
+GITHUB_REPO = os.getenv("GITHUB_REPO")
 
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY")
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY")

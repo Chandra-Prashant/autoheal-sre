@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>autoheal-sre</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.3rem; }
+  .row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  select, button { font-size: 1rem; padding: 0.4rem 0.7rem; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: 0.5; }
+  #log { background: #0d1117; color: #c9d1d9; font-family: monospace; font-size: 0.85rem;
+         padding: 0.75rem; border-radius: 6px; height: 220px; overflow-y: auto; white-space: pre-wrap; }
+  #log .node { color: #79c0ff; }
+  #log .err { color: #ff7b72; }
+  #result { margin-top: 1rem; }
+  #banner { padding: 0.6rem 0.9rem; border-radius: 6px; font-weight: 600; margin-bottom: 0.75rem; }
+  #banner.pass { background: #d5f5e3; color: #196f3d; }
+  #banner.fail { background: #fadbd8; color: #922b21; }
+  pre.diff { background: #f6f8fa; padding: 0.75rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; }
+  pre.diff .add { color: #196f3d; }
+  pre.diff .del { color: #922b21; }
+  #approve { background: #196f3d; color: white; border: none; border-radius: 6px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>autoheal-sre - demo</h1>
+
+<div class="row">
+  <select id="bug"></select>
+  <button id="run">Run fix</button>
+</div>
+
+<div id="log"></div>
+
+<div id="result" hidden>
+  <div id="banner"></div>
+  <pre class="diff" id="diff"></pre>
+  <button id="approve" hidden>Approve &amp; push</button>
+  <span id="pr-link"></span>
+</div>
+
+<script>
+const bugSelect = document.getElementById('bug');
+const runBtn = document.getElementById('run');
+const logEl = document.getElementById('log');
+const resultEl = document.getElementById('result');
+const bannerEl = document.getElementById('banner');
+const diffEl = document.getElementById('diff');
+const approveBtn = document.getElementById('approve');
+const prLinkEl = document.getElementById('pr-link');
+
+let currentRunId = null;
+
+function log(text, cls) {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = text;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderDiff(patch) {
+  diffEl.innerHTML = '';
+  for (const line of patch.split('\n')) {
+    const span = document.createElement('div');
+    if (line.startsWith('+') && !line.startsWith('+++')) span.className = 'add';
+    else if (line.startsWith('-') && !line.startsWith('---')) span.className = 'del';
+    span.textContent = line;
+    diffEl.appendChild(span);
+  }
+}
+
+async function loadBugs() {
+  const res = await fetch('/bugs');
+  const bugs = await res.json();
+  bugSelect.innerHTML = bugs.map(b => `<option value="${b.id}">${b.id} - ${b.description}</option>`).join('');
+}
+
+function runFix() {
+  const bugId = bugSelect.value;
+  if (!bugId) return;
+
+  runBtn.disabled = true;
+  bugSelect.disabled = true;
+  logEl.innerHTML = '';
+  resultEl.hidden = true;
+  approveBtn.hidden = true;
+  prLinkEl.textContent = '';
+  currentRunId = null;
+
+  const es = new EventSource(`/fix?bug_id=${encodeURIComponent(bugId)}`);
+
+  es.addEventListener('stage', e => log(JSON.parse(e.data).message));
+
+  es.addEventListener('node', e => {
+    const d = JSON.parse(e.data);
+    log(`${d.node} (attempt ${d.attempt})${d.passed ? ' - passed' : ''}`, 'node');
+  });
+
+  es.addEventListener('result', e => {
+    const d = JSON.parse(e.data);
+    resultEl.hidden = false;
+    if (d.passed) {
+      bannerEl.className = 'pass';
+      bannerEl.textContent = `Fixed on attempt ${d.attempt}/3`;
+      renderDiff(d.patch);
+      approveBtn.hidden = false;
+      currentRunId = d.run_id;
+    } else {
+      bannerEl.className = 'fail';
+      bannerEl.textContent = `Gave up after ${d.attempt} attempt(s)`;
+      diffEl.textContent = d.test_output || '(no output)';
+    }
+    es.close();
+    runBtn.disabled = false;
+    bugSelect.disabled = false;
+  });
+
+  es.addEventListener('error', e => {
+    if (e.data) log(JSON.parse(e.data).message, 'err');
+    es.close();
+    runBtn.disabled = false;
+    bugSelect.disabled = false;
+  });
+}
+
+async function approve() {
+  if (!currentRunId) return;
+  approveBtn.disabled = true;
+  approveBtn.textContent = 'Pushing...';
+  try {
+    const res = await fetch('/pr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: currentRunId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'PR creation failed');
+    prLinkEl.innerHTML = ` <a href="${data.url}" target="_blank">${data.url}</a>`;
+    approveBtn.hidden = true;
+  } catch (err) {
+    prLinkEl.textContent = ` error: ${err.message}`;
+    approveBtn.disabled = false;
+    approveBtn.textContent = 'Approve & push';
+  }
+}
+
+runBtn.addEventListener('click', runFix);
+approveBtn.addEventListener('click', approve);
+loadBugs();
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from scripts.run_evals import capture_trace
+from app.sandbox.runner import capture_trace
 from scripts.seed_bugs import load_definitions, seed
 
 DEFAULT_BUG = "01-moving-average-off-by-one"

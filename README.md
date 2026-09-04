@@ -37,9 +37,10 @@ trace  ->  diagnose  ->  plan  ->  code  ->  verify  ->  (pass? -> PR : retry co
   back into **code** and it tries again. After 3 failed attempts, or on
   success, the loop ends.
 - **PR generation** (`app/github/pr.py`) - once a patch passes, it can be
-  pushed to a branch and opened as a real PR via PyGithub. This part is
-  built and tested but not yet wired to an automatic trigger (see
-  *Current state* below).
+  pushed to a branch and opened as a real PR via PyGithub. It's not
+  automatic - in the demo UI (see *Running it*) this is gated behind an
+  explicit "Approve & push" button, so a passing patch never gets pushed
+  without a human looking at the diff first.
 
 The retrieval step (`app/graph/`) is the part I actually care about most:
 `ast_parser.py` walks a tree-sitter AST to find real function and class
@@ -54,7 +55,9 @@ tested directly (see the eval bugs below, bug 04 in particular).
 
 ```
 app/
-  main.py            FastAPI app, currently just a /health endpoint
+  main.py            FastAPI app: /health, /bugs, /fix (SSE), /pr, and /
+  static/
+    index.html          the one-page demo UI (plain HTML/JS, no build step)
   cli.py               autoheal fix CLI entry point (see pyproject.toml)
   config.py           env var loading, the Groq client factory
   tracing.py            Langfuse spans, threaded through AgentState
@@ -101,6 +104,12 @@ cp .env.example .env   # fill in the keys below
   plan).
 - `GITHUB_TOKEN` - a **classic** PAT with the `repo` scope, for PR creation.
   See *Current state* for why it has to be classic, not fine-grained.
+- `GITHUB_REPO` - only needed for the demo frontend's "Approve & push"
+  button (`owner/repo`). Its default branch content needs to match
+  `evals/bugs/sample_repo`, since the frontend clones it fresh and applies
+  the same find/replace bug transform the eval harness uses - if the
+  content doesn't line up, seeding fails loudly with a clear error instead
+  of silently doing the wrong thing.
 - `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` - optional. If set, every
   graph run gets traced (node name, model, token usage, latency per node).
   If unset, the Langfuse client just logs an auth warning and no-ops - the
@@ -116,11 +125,17 @@ builds a small `autoheal-sandbox:latest` image (python:3.11-slim + pytest).
 uvicorn app.main:app --reload
 ```
 
-gets you `GET /health` -> `{"status": "ok"}`. That's the only HTTP endpoint
-so far - there's no webhook or trigger route wired up yet that runs the
-full diagnose-plan-code-verify loop over HTTP (see *Current state*).
+gets you `GET /health` and a one-page demo UI at `/` - pick one of the 15
+seeded bugs from the dropdown, hit "Run fix", and watch each node
+(diagnose/plan/code/verify) stream in live as it completes. On success it
+shows the diff and an "Approve & push" button that only then calls the
+GitHub PR step; on failure (3 exhausted attempts) it shows the last test
+output. This is `app/static/index.html` talking to `GET /bugs`, `GET /fix`
+(server-sent events, one per node) and `POST /pr` - there's still no
+general-purpose webhook that takes an arbitrary CI failure over HTTP, just
+this fixed demo flow over the seeded eval bugs.
 
-The actual way to run the loop is the CLI:
+Alternatively, drive the loop from the CLI:
 
 ```
 pip install -e .
@@ -215,10 +230,15 @@ Being upfront about where the rough edges are:
   and running the full 15-bug eval a few times in one day is enough to hit
   it. There's no queuing or backoff-across-days here, it just fails loudly
   when the budget's gone.
-- **No HTTP trigger endpoint yet.** `app/main.py` only exposes `/health`.
-  The loop runs fine end-to-end via the `autoheal fix` CLI (`app/cli.py`)
-  or the eval harness, but there's no webhook that takes a CI failure and
-  runs the whole thing automatically over HTTP.
+- **No general-purpose HTTP trigger.** `GET /fix` runs the loop over HTTP,
+  but only against the seeded eval bugs (it clones `GITHUB_REPO`, applies a
+  bug's find/replace transform, then runs it) - there's still no webhook
+  that takes an arbitrary CI failure and runs the whole thing automatically.
+- **The demo frontend assumes `GITHUB_REPO`'s content matches
+  `evals/bugs/sample_repo`.** It's a real HTTP round trip (clone -> seed ->
+  diagnose/plan/code/verify, streamed live via SSE -> Approve & push ->
+  PyGithub), not a mock, so that assumption has to hold or the seeding
+  step's find-string check fails immediately with a clear error.
 - **Langfuse tracing covers node name, model, tokens, and latency per
   node**, grouped under one trace per graph run. The one wrinkle: LangGraph
   runs nodes on a worker thread pool, which drops Langfuse's ambient
@@ -241,5 +261,7 @@ useful context for anyone reading the code and wondering why something
 - Celery + Redis / any async task queue
 - A full Ragas-style eval harness (`evals/results.json` is deliberately
   simple)
-- A Streamlit/Next.js dashboard (CLI + the FastAPI docs page is the plan
-  for a demo, once there's a trigger endpoint to demo)
+- A Streamlit/Next.js dashboard, or anything resembling a production admin
+  UI. `app/static/index.html` is a single plain HTML/JS page with no build
+  step, built specifically to demo the loop against the seeded eval bugs -
+  it's not a general dashboard and wasn't meant to become one.

@@ -14,12 +14,7 @@ def load_definitions() -> list[dict]:
         return json.load(f)
 
 
-def seed(bug: dict) -> str:
-    dest = os.path.join(OUT_ROOT, bug["id"])
-    if os.path.exists(dest):
-        shutil.rmtree(dest)
-    shutil.copytree(SAMPLE_REPO, dest)
-
+def apply_bug(dest: str, bug: dict) -> None:
     target = os.path.join(dest, bug["file"])
     with open(target) as f:
         src = f.read()
@@ -31,6 +26,13 @@ def seed(bug: dict) -> str:
     with open(target, "w") as f:
         f.write(src.replace(bug["find"], bug["replace"]))
 
+
+def seed(bug: dict) -> str:
+    dest = os.path.join(OUT_ROOT, bug["id"])
+    if os.path.exists(dest):
+        shutil.rmtree(dest)
+    shutil.copytree(SAMPLE_REPO, dest)
+    apply_bug(dest, bug)
     return dest
 
 

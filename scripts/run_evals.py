@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 
@@ -11,19 +10,12 @@ from app.agents.graph_flow import build_graph
 from app.agents.state import AgentState
 from app.config import GROQ_MODEL
 from app.graph.embeddings import build_context
+from app.sandbox.runner import capture_trace
 from app.tracing import traced_run
 from langfuse import get_client
 from scripts.seed_bugs import load_definitions, seed
 
 RESULTS_PATH = os.path.join(os.path.dirname(__file__), "..", "evals", "results.json")
-
-
-def capture_trace(repo_path: str, test_target: str) -> str:
-    result = subprocess.run(
-        ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", test_target],
-        cwd=repo_path, capture_output=True, text=True,
-    )
-    return result.stdout + result.stderr
 
 
 def run_bug(bug: dict, model: str) -> dict:

@@ -2,7 +2,7 @@ from contextlib import contextmanager
 
 from langfuse import get_client
 
-__all__ = ["node_span", "log_usage", "traced_run"]
+__all__ = ["node_span", "log_usage", "traced_run", "traced_stream"]
 
 
 @contextmanager
@@ -35,6 +35,20 @@ def traced_run(graph, state) -> dict:
     state = state.model_copy(update={"run_trace_id": span.trace_id, "run_span_id": span.id})
     try:
         return graph.invoke(state)
+    finally:
+        span.end()
+        client.flush()
+
+
+def traced_stream(graph, state):
+    # same idea as traced_run, but yields each node's update as it completes
+    # instead of blocking for the final result - for the frontend's live
+    # progress view
+    client = get_client()
+    span = client.start_observation(name="autoheal_run", as_type="span")
+    state = state.model_copy(update={"run_trace_id": span.trace_id, "run_span_id": span.id})
+    try:
+        yield from graph.stream(state)
     finally:
         span.end()
         client.flush()
