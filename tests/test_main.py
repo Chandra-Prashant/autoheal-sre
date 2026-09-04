@@ -55,7 +55,7 @@ def _fake_node_updates():
 def test_fix_streams_node_updates_and_records_a_run_on_success(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "GITHUB_REPO", "me/repo")
     monkeypatch.setattr(main, "GITHUB_TOKEN", "tok")
-    monkeypatch.setattr(main, "_clone_target_repo", lambda: str(tmp_path))
+    monkeypatch.setattr(main, "_clone_repo", lambda repo_full_name: str(tmp_path))
     monkeypatch.setattr(main, "apply_bug", lambda dest, bug: None)
     monkeypatch.setattr(main, "capture_trace", lambda repo_path, target: "boom")
     monkeypatch.setattr(main, "build_context", lambda repo_path, trace: ["ctx"])
@@ -81,7 +81,7 @@ def test_fix_cleans_up_and_reports_failure_after_exhausting_attempts(monkeypatch
 
     monkeypatch.setattr(main, "GITHUB_REPO", "me/repo")
     monkeypatch.setattr(main, "GITHUB_TOKEN", "tok")
-    monkeypatch.setattr(main, "_clone_target_repo", lambda: str(tmp_path))
+    monkeypatch.setattr(main, "_clone_repo", lambda repo_full_name: str(tmp_path))
     monkeypatch.setattr(main, "apply_bug", lambda dest, bug: None)
     monkeypatch.setattr(main, "capture_trace", lambda repo_path, target: "boom")
     monkeypatch.setattr(main, "build_context", lambda repo_path, trace: ["ctx"])
@@ -92,6 +92,50 @@ def test_fix_cleans_up_and_reports_failure_after_exhausting_attempts(monkeypatch
     assert '"passed": false' in res.text
     assert "still broken" in res.text
     assert not os.path.exists(tmp_path)
+
+
+def test_fix_custom_errors_without_a_repo(monkeypatch):
+    monkeypatch.setattr(main, "GITHUB_TOKEN", "tok")
+
+    res = client.get("/fix?trace=boom")
+
+    assert "event: error" in res.text
+    assert "owner/name" in res.text
+
+
+def test_fix_custom_errors_on_a_malformed_repo(monkeypatch):
+    monkeypatch.setattr(main, "GITHUB_TOKEN", "tok")
+
+    res = client.get("/fix?repo=not-a-valid-repo&trace=boom")
+
+    assert "event: error" in res.text
+    assert "owner/name" in res.text
+
+
+def test_fix_custom_errors_without_trace_text(monkeypatch):
+    monkeypatch.setattr(main, "GITHUB_TOKEN", "tok")
+
+    res = client.get("/fix?repo=me/other-repo")
+
+    assert "event: error" in res.text
+    assert "trace text" in res.text
+
+
+def test_fix_custom_streams_node_updates_and_records_a_run_on_success(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(main, "_clone_repo", lambda repo_full_name: str(tmp_path))
+    monkeypatch.setattr(main, "build_context", lambda repo_path, trace: ["ctx"])
+    monkeypatch.setattr(main, "traced_stream", lambda graph, state: _fake_node_updates())
+
+    before = set(main.RUNS)
+    res = client.get("/fix?repo=me/other-repo&trace=boom")
+
+    assert "event: node" in res.text
+    assert "event: result" in res.text
+    assert '"passed": true' in res.text
+
+    run_id = next(iter(set(main.RUNS) - before))
+    assert main.RUNS[run_id]["target_repo"] == "me/other-repo"
 
 
 def test_approve_rejects_an_unknown_run_id():
@@ -107,11 +151,11 @@ def test_approve_applies_the_patch_and_opens_a_pr(monkeypatch, tmp_path):
 
     main.RUNS["r1"] = {
         "repo_path": str(repo_dir),
+        "target_repo": "me/repo",
         "patch": "the-diff",
         "title": "autoheal: fix bug",
         "body": "diagnosis + plan",
     }
-    monkeypatch.setattr(main, "GITHUB_REPO", "me/repo")
     monkeypatch.setattr(main, "apply_patch", lambda repo_path, patch: str(patched_dir))
     monkeypatch.setattr(main, "open_pr", lambda repo_path, full_name, title, body: "https://github.com/me/repo/pull/1")
 

@@ -7,9 +7,18 @@
   body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
   h1 { font-size: 1.3rem; }
   .row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-  select, button { font-size: 1rem; padding: 0.4rem 0.7rem; }
+  select, button, input[type=text] { font-size: 1rem; padding: 0.4rem 0.7rem; }
+  input[type=text] { font-family: inherit; }
   button { cursor: pointer; }
   button:disabled { cursor: not-allowed; opacity: 0.5; }
+  .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .tabs button { background: none; border: 1px solid #ccc; border-radius: 6px; color: #555; }
+  .tabs button.active { background: #1a1a1a; color: white; border-color: #1a1a1a; }
+  .mode { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+  .mode input[type=text] { width: 100%; box-sizing: border-box; }
+  .mode textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 0.85rem;
+                    padding: 0.5rem; min-height: 140px; resize: vertical; }
+  .mode label { font-size: 0.85rem; color: #555; }
   #log { background: #0d1117; color: #c9d1d9; font-family: monospace; font-size: 0.85rem;
          padding: 0.75rem; border-radius: 6px; height: 220px; overflow-y: auto; white-space: pre-wrap; }
   #log .node { color: #79c0ff; }
@@ -29,9 +38,26 @@
 
 <h1>autoheal-sre - demo</h1>
 
-<div class="row">
+<div class="tabs">
+  <button id="tab-seeded" class="active">Seeded bug</button>
+  <button id="tab-custom">Custom</button>
+</div>
+
+<div id="mode-seeded" class="row">
   <select id="bug"></select>
   <button id="run">Run fix</button>
+</div>
+
+<div id="mode-custom" class="mode" hidden>
+  <div>
+    <label for="repo">Repo (owner/name)</label>
+    <input type="text" id="repo" placeholder="owner/name">
+  </div>
+  <div>
+    <label for="trace">Trace / error output</label>
+    <textarea id="trace" placeholder="paste a pytest failure or traceback here"></textarea>
+  </div>
+  <button id="run-custom">Fix it</button>
 </div>
 
 <div id="log"></div>
@@ -44,8 +70,17 @@
 </div>
 
 <script>
+const DEFAULT_REPO = __GITHUB_REPO__;
+
+const tabSeeded = document.getElementById('tab-seeded');
+const tabCustom = document.getElementById('tab-custom');
+const modeSeeded = document.getElementById('mode-seeded');
+const modeCustom = document.getElementById('mode-custom');
 const bugSelect = document.getElementById('bug');
 const runBtn = document.getElementById('run');
+const repoInput = document.getElementById('repo');
+const traceInput = document.getElementById('trace');
+const runCustomBtn = document.getElementById('run-custom');
 const logEl = document.getElementById('log');
 const resultEl = document.getElementById('result');
 const bannerEl = document.getElementById('banner');
@@ -54,6 +89,18 @@ const approveBtn = document.getElementById('approve');
 const prLinkEl = document.getElementById('pr-link');
 
 let currentRunId = null;
+
+repoInput.value = DEFAULT_REPO;
+
+function showTab(tab) {
+  const seeded = tab === 'seeded';
+  tabSeeded.classList.toggle('active', seeded);
+  tabCustom.classList.toggle('active', !seeded);
+  modeSeeded.hidden = !seeded;
+  modeCustom.hidden = seeded;
+}
+tabSeeded.addEventListener('click', () => showTab('seeded'));
+tabCustom.addEventListener('click', () => showTab('custom'));
 
 function log(text, cls) {
   const line = document.createElement('div');
@@ -80,19 +127,23 @@ async function loadBugs() {
   bugSelect.innerHTML = bugs.map(b => `<option value="${b.id}">${b.id} - ${b.description}</option>`).join('');
 }
 
-function runFix() {
-  const bugId = bugSelect.value;
-  if (!bugId) return;
+function setControlsDisabled(disabled) {
+  runBtn.disabled = disabled;
+  bugSelect.disabled = disabled;
+  runCustomBtn.disabled = disabled;
+  repoInput.disabled = disabled;
+  traceInput.disabled = disabled;
+}
 
-  runBtn.disabled = true;
-  bugSelect.disabled = true;
+function runFix(query) {
   logEl.innerHTML = '';
   resultEl.hidden = true;
   approveBtn.hidden = true;
   prLinkEl.textContent = '';
   currentRunId = null;
+  setControlsDisabled(true);
 
-  const es = new EventSource(`/fix?bug_id=${encodeURIComponent(bugId)}`);
+  const es = new EventSource(`/fix?${query}`);
 
   es.addEventListener('stage', e => log(JSON.parse(e.data).message));
 
@@ -116,16 +167,27 @@ function runFix() {
       diffEl.textContent = d.test_output || '(no output)';
     }
     es.close();
-    runBtn.disabled = false;
-    bugSelect.disabled = false;
+    setControlsDisabled(false);
   });
 
   es.addEventListener('error', e => {
     if (e.data) log(JSON.parse(e.data).message, 'err');
     es.close();
-    runBtn.disabled = false;
-    bugSelect.disabled = false;
+    setControlsDisabled(false);
   });
+}
+
+function runSeededFix() {
+  const bugId = bugSelect.value;
+  if (!bugId) return;
+  runFix(`bug_id=${encodeURIComponent(bugId)}`);
+}
+
+function runCustomFix() {
+  const repo = repoInput.value.trim();
+  const trace = traceInput.value;
+  if (!repo || !trace.trim()) return;
+  runFix(`repo=${encodeURIComponent(repo)}&trace=${encodeURIComponent(trace)}`);
 }
 
 async function approve() {
@@ -149,7 +211,8 @@ async function approve() {
   }
 }
 
-runBtn.addEventListener('click', runFix);
+runBtn.addEventListener('click', runSeededFix);
+runCustomBtn.addEventListener('click', runCustomFix);
 approveBtn.addEventListener('click', approve);
 loadBugs();
 </script>

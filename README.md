@@ -104,12 +104,15 @@ cp .env.example .env   # fill in the keys below
   plan).
 - `GITHUB_TOKEN` - a **classic** PAT with the `repo` scope, for PR creation.
   See *Current state* for why it has to be classic, not fine-grained.
-- `GITHUB_REPO` - only needed for the demo frontend's "Approve & push"
-  button (`owner/repo`). Its default branch content needs to match
-  `evals/bugs/sample_repo`, since the frontend clones it fresh and applies
-  the same find/replace bug transform the eval harness uses - if the
-  content doesn't line up, seeding fails loudly with a clear error instead
-  of silently doing the wrong thing.
+- `GITHUB_REPO` - the repo the demo frontend's **Seeded bug** mode clones
+  and seeds a bug into (`owner/repo`). Its default branch content needs to
+  match `evals/bugs/sample_repo`, since seeding applies the same find/replace
+  bug transform the eval harness uses - if the content doesn't line up,
+  seeding fails loudly with a clear error instead of silently doing the
+  wrong thing. It's also used to pre-fill the repo field in the frontend's
+  **Custom** mode, but that's just a convenience default - Custom mode lets
+  you type over it and point at any repo `GITHUB_TOKEN` can clone and push
+  a branch to.
 - `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` - optional. If set, every
   graph run gets traced (node name, model, token usage, latency per node).
   If unset, the Langfuse client just logs an auth warning and no-ops - the
@@ -125,15 +128,25 @@ builds a small `autoheal-sandbox:latest` image (python:3.11-slim + pytest).
 uvicorn app.main:app --reload
 ```
 
-gets you `GET /health` and a one-page demo UI at `/` - pick one of the 15
-seeded bugs from the dropdown, hit "Run fix", and watch each node
-(diagnose/plan/code/verify) stream in live as it completes. On success it
-shows the diff and an "Approve & push" button that only then calls the
-GitHub PR step; on failure (3 exhausted attempts) it shows the last test
-output. This is `app/static/index.html` talking to `GET /bugs`, `GET /fix`
-(server-sent events, one per node) and `POST /pr` - there's still no
-general-purpose webhook that takes an arbitrary CI failure over HTTP, just
-this fixed demo flow over the seeded eval bugs.
+gets you `GET /health` and a one-page demo UI at `/` with two modes:
+
+- **Seeded bug** - pick one of the 15 seeded bugs from the dropdown, hit
+  "Run fix". `GITHUB_REPO` gets cloned fresh and the bug's find/replace
+  transform is applied before the loop runs, same as `run_evals.py`.
+- **Custom** - paste any `owner/name` repo and a trace/error you already
+  have, hit "Fix it". No seeding step - the repo is cloned as-is and the
+  pasted text is used directly as the trace. Useful for trying the loop
+  against something other than the 15 seeded bugs, as long as the repo is
+  one `GITHUB_TOKEN` can clone and push a branch to.
+
+Both modes stream the same live progress (diagnose/plan/code/verify, one
+event per node) and land on the same result view: a diff and an
+"Approve & push" button on success, the last test output after 3 exhausted
+attempts on failure. This is `app/static/index.html` talking to `GET /bugs`,
+`GET /fix?bug_id=...` or `GET /fix?repo=...&trace=...` (server-sent events)
+and `POST /pr` - there's still no general-purpose webhook that takes an
+arbitrary CI failure over HTTP automatically, both modes are triggered by
+hand from the UI.
 
 Alternatively, drive the loop from the CLI:
 
@@ -230,15 +243,22 @@ Being upfront about where the rough edges are:
   and running the full 15-bug eval a few times in one day is enough to hit
   it. There's no queuing or backoff-across-days here, it just fails loudly
   when the budget's gone.
-- **No general-purpose HTTP trigger.** `GET /fix` runs the loop over HTTP,
-  but only against the seeded eval bugs (it clones `GITHUB_REPO`, applies a
-  bug's find/replace transform, then runs it) - there's still no webhook
-  that takes an arbitrary CI failure and runs the whole thing automatically.
-- **The demo frontend assumes `GITHUB_REPO`'s content matches
+- **No automatic HTTP trigger.** `GET /fix` runs the loop over HTTP and now
+  accepts either `bug_id` (seeded mode) or `repo` + `trace` (custom mode,
+  see *Running it*), so it's no longer limited to the 15 seeded bugs - but
+  it's still a manually-triggered demo endpoint, not a webhook. Nothing
+  calls `/fix` on its own in response to a real CI failure.
+- **Seeded mode assumes `GITHUB_REPO`'s content matches
   `evals/bugs/sample_repo`.** It's a real HTTP round trip (clone -> seed ->
   diagnose/plan/code/verify, streamed live via SSE -> Approve & push ->
   PyGithub), not a mock, so that assumption has to hold or the seeding
-  step's find-string check fails immediately with a clear error.
+  step's find-string check fails immediately with a clear error. Custom
+  mode has no such assumption - it clones whatever repo you type in as-is
+  and uses the pasted trace directly, no seeding step involved.
+- **`open_pr()` resolves the target repo's actual default branch** via the
+  GitHub API rather than assuming `main` - found the hard way during a live
+  smoke test against `autoheal-sre-evals`, whose default branch is `master`.
+  PR creation would have 404'd against any repo not defaulting to `main`.
 - **Langfuse tracing covers node name, model, tokens, and latency per
   node**, grouped under one trace per graph run. The one wrinkle: LangGraph
   runs nodes on a worker thread pool, which drops Langfuse's ambient
