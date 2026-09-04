@@ -8,6 +8,11 @@
   h1 { font-size: 1.3rem; }
   .row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
   select, button, input[type=text] { font-size: 1rem; padding: 0.4rem 0.7rem; }
+  /* native <select> sizes itself to its widest <option> - bug 04's description
+     alone is 300+ chars, which without this blows the flex row way past the
+     button and shoves it off screen */
+  .row select { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row button { flex-shrink: 0; }
   input[type=text] { font-family: inherit; }
   button { cursor: pointer; }
   button:disabled { cursor: not-allowed; opacity: 0.5; }
@@ -171,7 +176,10 @@ function runFix(query) {
   });
 
   es.addEventListener('error', e => {
-    if (e.data) log(JSON.parse(e.data).message, 'err');
+    // e.data is only set for a real "event: error" the server sent - a dropped
+    // or refused connection fires a plain Event with no data, so without this
+    // branch a dead server just looks like nothing happened
+    log(e.data ? JSON.parse(e.data).message : 'lost connection to the server - is uvicorn still running?', 'err');
     es.close();
     setControlsDisabled(false);
   });
